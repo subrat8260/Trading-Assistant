@@ -14,7 +14,7 @@ export const useCurrentSession = () => {
   return useQuery({
     queryKey: TRADING_KEYS.currentSession(),
     queryFn: () => tradingService.getCurrentSession(),
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 60 * 5, // 5 minutes stale time to avoid background refetch flashes
   });
 };
 
@@ -28,17 +28,13 @@ export const useStartSession = () => {
     mutationFn: (data) => tradingService.startSession(data),
     onSuccess: (res) => {
       const newSession = res?.data?.session;
-      if (newSession) {
-        queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
-          ...old,
-          data: {
-            session: newSession,
-            recentTrades: [],
-          },
-        }));
-      }
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
+      queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
+        ...old,
+        data: {
+          session: newSession || null,
+          recentTrades: [],
+        },
+      }));
     },
   });
 };
@@ -57,21 +53,18 @@ export const useRecordResult = () => {
 
       if (updatedSession) {
         queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => {
-          if (!old) return old;
           return {
             ...old,
             data: {
-              ...old.data,
+              ...old?.data,
               session: updatedSession,
               recentTrades: newTradeLog
-                ? [newTradeLog, ...(old.data?.recentTrades || [])]
-                : old.data?.recentTrades,
+                ? [newTradeLog, ...(old?.data?.recentTrades || [])]
+                : old?.data?.recentTrades || [],
             },
           };
         });
       }
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
     },
   });
 };
@@ -93,8 +86,6 @@ export const useResetSession = () => {
           recentTrades: [],
         },
       }));
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
     },
   });
 };

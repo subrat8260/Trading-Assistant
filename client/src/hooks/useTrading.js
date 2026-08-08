@@ -14,7 +14,7 @@ export const useCurrentSession = () => {
   return useQuery({
     queryKey: TRADING_KEYS.currentSession(),
     queryFn: () => tradingService.getCurrentSession(),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
   });
 };
 
@@ -37,7 +37,7 @@ export const useStartSession = () => {
           },
         }));
       }
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
+      queryClient.refetchQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };
@@ -69,7 +69,7 @@ export const useRecordResult = () => {
           };
         });
       }
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
+      queryClient.refetchQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };
@@ -91,7 +91,7 @@ export const useResetSession = () => {
           recentTrades: [],
         },
       }));
-      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
+      queryClient.refetchQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };

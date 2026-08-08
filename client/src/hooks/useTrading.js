@@ -26,7 +26,17 @@ export const useStartSession = () => {
 
   return useMutation({
     mutationFn: (data) => tradingService.startSession(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      const newSession = res?.data?.session;
+      if (newSession) {
+        queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
+          ...old,
+          data: {
+            session: newSession,
+            recentTrades: [],
+          },
+        }));
+      }
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
     },
@@ -41,7 +51,25 @@ export const useRecordResult = () => {
 
   return useMutation({
     mutationFn: (data) => tradingService.recordResult(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      const updatedSession = res?.data?.session;
+      const newTradeLog = res?.data?.tradeLog;
+
+      if (updatedSession) {
+        queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              session: updatedSession,
+              recentTrades: newTradeLog
+                ? [newTradeLog, ...(old.data?.recentTrades || [])]
+                : old.data?.recentTrades,
+            },
+          };
+        });
+      }
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
     },
@@ -56,7 +84,15 @@ export const useResetSession = () => {
 
   return useMutation({
     mutationFn: (data) => tradingService.resetSession(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      const updatedSession = res?.data?.session;
+      queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
+        ...old,
+        data: {
+          session: updatedSession || null,
+          recentTrades: [],
+        },
+      }));
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
       queryClient.invalidateQueries({ queryKey: TRADING_KEYS.all });
     },

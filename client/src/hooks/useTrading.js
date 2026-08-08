@@ -14,7 +14,7 @@ export const useCurrentSession = () => {
   return useQuery({
     queryKey: TRADING_KEYS.currentSession(),
     queryFn: () => tradingService.getCurrentSession(),
-    staleTime: 1000 * 60 * 5, // 5 minutes stale time to avoid background refetch flashes
+    staleTime: 1000 * 60 * 5,
   });
 };
 
@@ -27,14 +27,17 @@ export const useStartSession = () => {
   return useMutation({
     mutationFn: (data) => tradingService.startSession(data),
     onSuccess: (res) => {
-      const newSession = res?.data?.session;
-      queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
-        ...old,
-        data: {
-          session: newSession || null,
-          recentTrades: [],
-        },
-      }));
+      const newSession = res?.data?.data?.session;
+      if (newSession) {
+        queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
+          ...old,
+          data: {
+            session: newSession,
+            recentTrades: [],
+          },
+        }));
+      }
+      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };
@@ -48,8 +51,9 @@ export const useRecordResult = () => {
   return useMutation({
     mutationFn: (data) => tradingService.recordResult(data),
     onSuccess: (res) => {
-      const updatedSession = res?.data?.session;
-      const newTradeLog = res?.data?.tradeLog;
+      const payloadData = res?.data?.data;
+      const updatedSession = payloadData?.session;
+      const newTradeLog = payloadData?.tradeLog;
 
       if (updatedSession) {
         queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => {
@@ -65,6 +69,7 @@ export const useRecordResult = () => {
           };
         });
       }
+      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };
@@ -78,7 +83,7 @@ export const useResetSession = () => {
   return useMutation({
     mutationFn: (data) => tradingService.resetSession(data),
     onSuccess: (res) => {
-      const updatedSession = res?.data?.session;
+      const updatedSession = res?.data?.data?.session;
       queryClient.setQueryData(TRADING_KEYS.currentSession(), (old) => ({
         ...old,
         data: {
@@ -86,6 +91,7 @@ export const useResetSession = () => {
           recentTrades: [],
         },
       }));
+      queryClient.invalidateQueries({ queryKey: TRADING_KEYS.currentSession() });
     },
   });
 };

@@ -79,6 +79,13 @@ const DashboardPage = () => {
   const activeSession = sessionData?.data?.session;
   const recentTrades = sessionData?.data?.recentTrades || [];
 
+  // Instant pre-calculated stake override for 0ms latency UI response
+  const [instantStakeOverride, setInstantStakeOverride] = useState(null);
+
+  useEffect(() => {
+    setInstantStakeOverride(null);
+  }, [activeSession?.nextTradeAmount, activeSession?.currentTradeNumber]);
+
   // Form & Selection State
   const [selectedPair, setSelectedPair] = useState('USD/BDT (OTC)');
   const [selectedTimeframe, setSelectedTimeframe] = useState('01:00');
@@ -149,6 +156,13 @@ const DashboardPage = () => {
         return;
       }
 
+      // INSTANT UI STAKE UPDATE (0ms latency!)
+      if (resultCode === 'W' && activeSession.winNextStake !== null && activeSession.winNextStake !== undefined) {
+        setInstantStakeOverride(activeSession.winNextStake);
+      } else if (resultCode === 'L' && activeSession.lossNextStake !== null && activeSession.lossNextStake !== undefined) {
+        setInstantStakeOverride(activeSession.lossNextStake);
+      }
+
       // Capture signal metadata before clearing active signal
       const signalDir = activeSignal?.signal || 'BUY';
       const signalStrength = activeSignal?.signalStrength || '0.75';
@@ -188,28 +202,31 @@ const DashboardPage = () => {
     try {
       await resetSessionMutation.mutateAsync({ sessionId: activeSession?._id });
       setActiveSignal(null);
+      setInstantStakeOverride(null);
       showToast('Trading session reset. Ready for a new sequence.', 'info');
     } catch (err) {
       showToast(err.message || 'Failed to reset session', 'error');
     }
   };
 
-  // Keyboard Shortcuts Listener (W = Win, L = Loss, G = Generate Signal)
+  // Keyboard Shortcuts (G: Generate Signal, W: Win, L: Loss)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore if user is typing in an input or textarea
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      // Ignore if typing inside input, textarea, or contentEditable
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) {
+        return;
+      }
 
       const key = e.key.toLowerCase();
-      if (key === 'w' && !recordResultMutation.isPending) {
+      if (key === 'g' && !generateSignalMutation.isPending) {
+        e.preventDefault();
+        handleGenerateSignal();
+      } else if (key === 'w' && !recordResultMutation.isPending) {
         e.preventDefault();
         handleRecordResult('W');
       } else if (key === 'l' && !recordResultMutation.isPending) {
         e.preventDefault();
         handleRecordResult('L');
-      } else if (key === 'g' && !generateSignalMutation.isPending) {
-        e.preventDefault();
-        handleGenerateSignal();
       }
     };
 
@@ -222,6 +239,7 @@ const DashboardPage = () => {
   const initialCapital = activeSession?.initialCapital ?? 0;
   const sessionProfit = currentBalance - initialCapital;
   const nextStake = activeSession?.nextTradeAmount ?? 0;
+  const displayedStake = instantStakeOverride ?? nextStake;
   const tradeNum = activeSession?.currentTradeNumber ?? 1;
   const sequence = activeSession?.sequence || [];
 
@@ -311,19 +329,13 @@ const DashboardPage = () => {
             </div>
           </div>
           <div className="mt-2.5">
-            {recordResultMutation.isPending ? (
-              <h3 className="text-xl font-bold text-emerald-400/60 animate-pulse tracking-tight truncate font-mono">
-                {currencySymbol} --.--
-              </h3>
-            ) : (
-              <h3 className="text-xl font-bold text-emerald-400 tracking-tight truncate">
-                {nextStake !== null
-                  ? `${currencySymbol} ${nextStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : `${currencySymbol} 0.00`}
-              </h3>
-            )}
+            <h3 className="text-xl font-bold text-emerald-400 tracking-tight truncate">
+              {displayedStake !== null
+                ? `${currencySymbol} ${displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : `${currencySymbol} 0.00`}
+            </h3>
             <p className="text-xs text-slate-400 mt-1 truncate">
-              {recordResultMutation.isPending ? 'Calculating stake...' : 'Excel Stake'}
+              {recordResultMutation.isPending ? 'Syncing trade...' : 'Excel Stake'}
             </p>
           </div>
         </div>
@@ -641,7 +653,7 @@ const DashboardPage = () => {
                     Current Trade Stake (Trade #{tradeNum})
                   </span>
                   <div className="text-2xl font-black text-emerald-400 tracking-tight mt-0.5">
-                    {currencySymbol} {nextStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {currencySymbol} {displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
                 <div className="text-right">
@@ -660,15 +672,15 @@ const DashboardPage = () => {
                 <>
                   <div className="flex items-center gap-2 font-semibold text-emerald-400 animate-pulse text-sm">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    Recording Outcome & Calculating Stake...
+                    Recording Outcome & Pre-calculating Next Trade...
                   </div>
                   {activeSession && (
                     <div className="flex flex-col items-center rounded-xl bg-slate-900/90 border border-slate-800 px-6 py-3 shadow-md">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Calculating Stake...
+                        Current Trade Stake (Trade #{tradeNum})
                       </span>
-                      <span className="text-2xl font-black text-emerald-400/60 animate-pulse tracking-tight mt-0.5 font-mono">
-                        {currencySymbol} --.--
+                      <span className="text-2xl font-black text-emerald-400 tracking-tight mt-0.5">
+                        {currencySymbol} {displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   )}
@@ -685,7 +697,7 @@ const DashboardPage = () => {
                         Current Trade Stake (Trade #{tradeNum})
                       </span>
                       <span className="text-2xl font-black text-emerald-400 tracking-tight mt-0.5">
-                        {currencySymbol} {nextStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol} {displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   )}
@@ -699,7 +711,7 @@ const DashboardPage = () => {
                         Current Trade Stake (Trade #{tradeNum})
                       </span>
                       <span className="text-2xl font-black text-emerald-400 tracking-tight mt-0.5">
-                        {currencySymbol} {nextStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol} {displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   )}

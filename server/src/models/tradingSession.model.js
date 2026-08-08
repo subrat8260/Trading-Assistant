@@ -47,6 +47,14 @@ const tradingSessionSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    winNextStake: {
+      type: Number,
+      default: null,
+    },
+    lossNextStake: {
+      type: Number,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['ACTIVE', 'COMPLETED', 'FAILED'],

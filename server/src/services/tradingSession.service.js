@@ -8,6 +8,40 @@ import AppError from '../utils/AppError.js';
  */
 class TradingSessionService {
   /**
+   * Helper to pre-calculate both WIN and LOSS scenario next trade stakes
+   */
+  async computePrecalculatedStakes(sessionParams, currentSequence) {
+    try {
+      const [winRes, lossRes] = await Promise.all([
+        excelService.calculateMasaniello({
+          initialCapital: sessionParams.initialCapital,
+          totalEvents: sessionParams.totalTrades,
+          expectedWins: sessionParams.winsRequired,
+          quota: sessionParams.payout,
+          tradeResults: [...currentSequence, 'w'],
+        }),
+        excelService.calculateMasaniello({
+          initialCapital: sessionParams.initialCapital,
+          totalEvents: sessionParams.totalTrades,
+          expectedWins: sessionParams.winsRequired,
+          quota: sessionParams.payout,
+          tradeResults: [...currentSequence, 'l'],
+        }),
+      ]);
+
+      const winNextStake =
+        winRes.trades?.[winRes.trades.length - 1]?.stakeAmount ?? null;
+      const lossNextStake =
+        lossRes.trades?.[lossRes.trades.length - 1]?.stakeAmount ?? null;
+
+      return { winNextStake, lossNextStake };
+    } catch (err) {
+      console.error('Error pre-calculating WIN/LOSS next stakes:', err);
+      return { winNextStake: null, lossNextStake: null };
+    }
+  }
+
+  /**
    * Start a new trading session
    */
   async startSession(
@@ -31,6 +65,11 @@ class TradingSessionService {
 
     const initialStake = excelRes.trades?.[0]?.stakeAmount ?? null;
 
+    const { winNextStake, lossNextStake } = await this.computePrecalculatedStakes(
+      { initialCapital: capital, totalTrades: trades, winsRequired, payout },
+      []
+    );
+
     const newSession = await TradingSession.create({
       userId,
       initialCapital: capital,
@@ -41,6 +80,8 @@ class TradingSessionService {
       sequence: [],
       currentTradeNumber: 1,
       nextTradeAmount: initialStake,
+      winNextStake,
+      lossNextStake,
       status: 'ACTIVE',
     });
 
@@ -109,13 +150,23 @@ class TradingSessionService {
       }
     }
 
-    // Get next stake size from Excel (or fallback to latest trade stake if beyond initial sequence)
+    // Get next stake size from Excel
     const nextTradeAmount =
       nextExcelTrade?.stakeAmount ??
       excelRes.trades?.[excelRes.trades.length - 1]?.stakeAmount ??
       executedTradeAmount;
 
-    // Session remains ACTIVE continuously until user manually resets it!
+    // Pre-calculate WIN & LOSS stakes for the NEXT trade
+    const { winNextStake, lossNextStake } = await this.computePrecalculatedStakes(
+      {
+        initialCapital: session.initialCapital,
+        totalTrades: session.totalTrades,
+        winsRequired: session.winsRequired,
+        payout: session.payout,
+      },
+      updatedSequence
+    );
+
     const sessionStatus = 'ACTIVE';
 
     // Create TradeLog entry in MongoDB
@@ -138,6 +189,8 @@ class TradingSessionService {
     session.currentCapital = balanceAfter;
     session.currentTradeNumber = updatedSequence.length + 1;
     session.nextTradeAmount = nextTradeAmount;
+    session.winNextStake = winNextStake;
+    session.lossNextStake = lossNextStake;
     session.status = sessionStatus;
     await session.save();
 
@@ -145,11 +198,14 @@ class TradingSessionService {
 
     return {
       nextTradeAmount,
+      winNextStake,
+      lossNextStake,
       currentCapital: balanceAfter,
       tradeNumber: session.currentTradeNumber,
       sequence: updatedSequence.map((r) => r.toUpperCase()),
       profit: sessionProfit,
       sessionStatus,
+      session,
       tradeLog,
     };
   }

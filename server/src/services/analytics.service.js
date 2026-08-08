@@ -28,8 +28,16 @@ class AnalyticsService {
     }
     if (filters.startDate || filters.endDate) {
       match.createdAt = {};
-      if (filters.startDate) match.createdAt.$gte = new Date(filters.startDate);
-      if (filters.endDate) match.createdAt.$lte = new Date(filters.endDate);
+      if (filters.startDate) {
+        const start = new Date(filters.startDate);
+        start.setHours(0, 0, 0, 0);
+        match.createdAt.$gte = start;
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = end;
+      }
     }
 
     return match;

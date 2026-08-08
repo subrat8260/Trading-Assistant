@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import openpyxl
 
 def clean_val(val):
     if val is None:
@@ -18,28 +17,33 @@ def clean_val(val):
             return val_str
     return val
 
+def load_matrix(excel_path):
+    matrix_json_path = os.path.join(os.path.dirname(__file__), 'matrix.json')
+    if os.path.exists(matrix_json_path):
+        try:
+            with open(matrix_json_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    # Fallback: Load directly from Excel file if matrix.json is missing
+    import openpyxl
+    wb = openpyxl.load_workbook(excel_path, data_only=True)
+    ws_alg = wb['algoritmo']
+    matrix = []
+    for r in range(2, 102):
+        row_vals = []
+        for c in range(14, 115):  # Col N (14) to DJ (114)
+            row_vals.append(ws_alg.cell(r, c).value)
+        matrix.append(row_vals)
+    return matrix
+
 def process_excel(input_data):
     default_excel_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../RRMM (1).xlsx'))
     excel_path = os.path.abspath(input_data.get('excelPath', default_excel_path))
 
-    if not os.path.exists(excel_path):
-        return {
-            "status": "error",
-            "message": f"Excel workbook not found at path: {excel_path}"
-        }
-
     try:
-        # Load workbook using openpyxl
-        wb = openpyxl.load_workbook(excel_path, data_only=True)
-        ws_alg = wb['algoritmo']
-
-        # Read Pascal matrix N2:DJ101 stored in workbook sheet 'algoritmo'
-        matrix = []
-        for r in range(2, 102):
-            row_vals = []
-            for c in range(14, 115):  # Col N (14) to DJ (114)
-                row_vals.append(ws_alg.cell(r, c).value)
-            matrix.append(row_vals)
+        matrix = load_matrix(excel_path)
 
         def get_mat(r, c):
             if 0 <= r < len(matrix) and 0 <= c < len(matrix[r]):
@@ -69,7 +73,6 @@ def process_excel(input_data):
         actual_wins = 0
         actual_losses = 0
 
-        # Process up to length of trade_results + 1 for next recommended trade
         max_steps = max(len(trade_results) + 1, 100)
 
         for step in range(max_steps):
@@ -86,7 +89,6 @@ def process_excel(input_data):
             res_str = trade_results[step] if step < len(trade_results) else ""
 
             if not res_str:
-                # Next trade recommendation
                 trades_output.append({
                     "tradeIndex": step + 1,
                     "result": "",
@@ -118,7 +120,6 @@ def process_excel(input_data):
                 "portfolioBalance": round(F, 2)
             })
 
-            # Check continuous cycle reset matching Excel sheet
             if I_next >= expected_wins or H_next == (1 + total_events - expected_wins):
                 H, I = 0, 0
             else:

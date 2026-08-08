@@ -76,8 +76,17 @@ const DashboardPage = () => {
   const resetSessionMutation = useResetSession();
   const generateSignalMutation = useGenerateSignal();
 
-  const activeSession = sessionData?.data?.session;
+  const [sessionOverride, setSessionOverride] = useState(null);
+
+  const activeSession = sessionOverride || sessionData?.data?.session;
   const recentTrades = sessionData?.data?.recentTrades || [];
+
+  // Sync sessionOverride when sessionData loads or changes
+  useEffect(() => {
+    if (sessionData?.data?.session) {
+      setSessionOverride(sessionData.data.session);
+    }
+  }, [sessionData]);
 
   // Form & Selection State
   const [selectedPair, setSelectedPair] = useState('USD/BDT (OTC)');
@@ -107,12 +116,15 @@ const DashboardPage = () => {
   const handleStartSession = async (e) => {
     e.preventDefault();
     try {
-      await startSessionMutation.mutateAsync({
+      const res = await startSessionMutation.mutateAsync({
         capital: Number(setupCapital),
         trades: Number(setupTrades),
         winsRequired: Number(setupWinsRequired),
         payout: Number(setupPayout),
       });
+      if (res?.data?.session) {
+        setSessionOverride(res.data.session);
+      }
       setIsModalOpen(false);
       showToast('Trading session initialized with ExcelService calculations!', 'success');
     } catch (err) {
@@ -169,6 +181,9 @@ const DashboardPage = () => {
         });
 
         const resData = response.data;
+        if (resData?.session) {
+          setSessionOverride(resData.session);
+        }
 
         showToast(
           `Trade #${resData.tradeNumber - 1} (${resultCode === 'W' ? 'WIN' : 'LOSS'}) Recorded! Next stake: ${currencySymbol} ${
@@ -180,13 +195,14 @@ const DashboardPage = () => {
         showToast(err.message || 'Failed to record trade result', 'error');
       }
     },
-    [activeSession, activeSignal, recordResultMutation, selectedPair, selectedTimeframe]
+    [activeSession, activeSignal, recordResultMutation, selectedPair, selectedTimeframe, currencySymbol]
   );
 
   // Handler: Reset Session
   const handleResetSession = async () => {
     try {
       await resetSessionMutation.mutateAsync({ sessionId: activeSession?._id });
+      setSessionOverride(null);
       setActiveSignal(null);
       showToast('Trading session reset. Ready for a new sequence.', 'info');
     } catch (err) {

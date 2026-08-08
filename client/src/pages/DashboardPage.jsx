@@ -113,6 +113,17 @@ const DashboardPage = () => {
   const tradeNum = activeSequence.length + 1;
   const sequence = activeSequence;
 
+  // Visual micro-animation trigger whenever stake updates
+  const [stakeChanged, setStakeChanged] = useState(false);
+
+  useEffect(() => {
+    if (displayedStake > 0) {
+      setStakeChanged(true);
+      const timer = setTimeout(() => setStakeChanged(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [displayedStake, tradeNum]);
+
   // Form & Selection State
   const [selectedPair, setSelectedPair] = useState('USD/BDT (OTC)');
   const [selectedTimeframe, setSelectedTimeframe] = useState('01:00');
@@ -310,17 +321,35 @@ const DashboardPage = () => {
           icon={DollarSign}
         />
 
-        <div className="rounded-xl border border-emerald-500/40 bg-slate-900/80 p-4 shadow-lg shadow-emerald-500/5 backdrop-blur-sm overflow-hidden flex flex-col justify-between">
+        <div
+          className={`rounded-xl border p-4 shadow-lg backdrop-blur-sm overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+            stakeChanged
+              ? 'border-emerald-400/80 bg-slate-900 shadow-emerald-500/20 scale-[1.02]'
+              : 'border-emerald-500/40 bg-slate-900/80 shadow-emerald-500/5'
+          }`}
+        >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider truncate">
               Current Trade Stake
             </span>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-300 ${
+                stakeChanged
+                  ? 'bg-emerald-500/30 text-emerald-300 border-emerald-400/50 scale-110'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              }`}
+            >
               <Zap className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2.5">
-            <h3 className="text-xl font-bold text-emerald-400 tracking-tight truncate">
+            <h3
+              className={`text-xl font-bold tracking-tight truncate transition-all duration-300 ${
+                stakeChanged
+                  ? 'text-emerald-300 scale-105 drop-shadow-[0_0_12px_rgba(52,211,153,0.8)]'
+                  : 'text-emerald-400 scale-100'
+              }`}
+            >
               {displayedStake !== null
                 ? `${currencySymbol} ${displayedStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : `${currencySymbol} 0.00`}

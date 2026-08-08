@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -28,6 +28,7 @@ import Badge from '../components/common/Badge';
 import Toast from '../components/common/Toast';
 import SelectPairModal from '../components/common/SelectPairModal';
 import SelectTimeframeModal from '../components/common/SelectTimeframeModal';
+import { calculateMasanielloJS } from '../utils/masanielloCalculator';
 import LiveClockWidget from '../components/common/LiveClockWidget';
 import useAuth from '../hooks/useAuth';
 import { getCurrencySymbol } from '../utils/formatters';
@@ -79,12 +80,38 @@ const DashboardPage = () => {
   const activeSession = sessionData?.data?.session;
   const recentTrades = sessionData?.data?.recentTrades || [];
 
-  // Instant pre-calculated stake override for 0ms latency UI response
-  const [instantStakeOverride, setInstantStakeOverride] = useState(null);
+  // Local sequence override for 0ms instant UI rendering
+  const [localSequenceOverride, setLocalSequenceOverride] = useState(null);
 
   useEffect(() => {
-    setInstantStakeOverride(null);
-  }, [activeSession?.nextTradeAmount, activeSession?.currentTradeNumber]);
+    setLocalSequenceOverride(null);
+  }, [activeSession?.sequence?.length, activeSession?._id]);
+
+  const activeSequence = localSequenceOverride ?? (activeSession?.sequence || []);
+
+  const activeTrades = useMemo(() => {
+    if (!activeSession) return [];
+    return calculateMasanielloJS(
+      activeSession.initialCapital,
+      activeSession.totalTrades,
+      activeSession.winsRequired,
+      activeSession.payout,
+      activeSequence
+    );
+  }, [activeSession, activeSequence]);
+
+  const currentBalance = useMemo(() => {
+    if (!activeSession) return 0;
+    if (activeTrades.length <= 1) return activeSession.initialCapital;
+    const lastExecutedTrade = activeTrades[activeTrades.length - 2];
+    return lastExecutedTrade?.portfolioBalance ?? activeSession.initialCapital;
+  }, [activeSession, activeTrades]);
+
+  const initialCapital = activeSession?.initialCapital ?? 0;
+  const sessionProfit = currentBalance - initialCapital;
+  const displayedStake = activeTrades.length > 0 ? activeTrades[activeTrades.length - 1].stakeAmount : (activeSession?.nextTradeAmount ?? 0);
+  const tradeNum = activeSequence.length + 1;
+  const sequence = activeSequence;
 
   // Form & Selection State
   const [selectedPair, setSelectedPair] = useState('USD/BDT (OTC)');
@@ -121,6 +148,7 @@ const DashboardPage = () => {
         payout: Number(setupPayout),
       });
       setIsModalOpen(false);
+      setLocalSequenceOverride(null);
       showToast('Trading session initialized with ExcelService calculations!', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to start trading session', 'error');
@@ -156,12 +184,9 @@ const DashboardPage = () => {
         return;
       }
 
-      // INSTANT UI STAKE UPDATE (0ms latency!)
-      if (resultCode === 'W' && activeSession.winNextStake !== null && activeSession.winNextStake !== undefined) {
-        setInstantStakeOverride(activeSession.winNextStake);
-      } else if (resultCode === 'L' && activeSession.lossNextStake !== null && activeSession.lossNextStake !== undefined) {
-        setInstantStakeOverride(activeSession.lossNextStake);
-      }
+      // INSTANT UI UPDATE (0ms latency!)
+      const nextSeq = [...activeSequence, resultCode.toLowerCase()];
+      setLocalSequenceOverride(nextSeq);
 
       // Capture signal metadata before clearing active signal
       const signalDir = activeSignal?.signal || 'BUY';
@@ -194,7 +219,7 @@ const DashboardPage = () => {
         showToast(err.message || 'Failed to record trade result', 'error');
       }
     },
-    [activeSession, activeSignal, recordResultMutation, selectedPair, selectedTimeframe, currencySymbol]
+    [activeSession, activeSequence, activeSignal, recordResultMutation, selectedPair, selectedTimeframe, currencySymbol]
   );
 
   // Handler: Reset Session
@@ -202,46 +227,12 @@ const DashboardPage = () => {
     try {
       await resetSessionMutation.mutateAsync({ sessionId: activeSession?._id });
       setActiveSignal(null);
-      setInstantStakeOverride(null);
+      setLocalSequenceOverride(null);
       showToast('Trading session reset. Ready for a new sequence.', 'info');
     } catch (err) {
       showToast(err.message || 'Failed to reset session', 'error');
     }
   };
-
-  // Keyboard Shortcuts (G: Generate Signal, W: Win, L: Loss)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Ignore if typing inside input, textarea, or contentEditable
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable) {
-        return;
-      }
-
-      const key = e.key.toLowerCase();
-      if (key === 'g' && !generateSignalMutation.isPending) {
-        e.preventDefault();
-        handleGenerateSignal();
-      } else if (key === 'w' && !recordResultMutation.isPending) {
-        e.preventDefault();
-        handleRecordResult('W');
-      } else if (key === 'l' && !recordResultMutation.isPending) {
-        e.preventDefault();
-        handleRecordResult('L');
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleRecordResult, handleGenerateSignal, recordResultMutation.isPending, generateSignalMutation.isPending]);
-
-  // Calculated Summary Variables
-  const currentBalance = activeSession?.currentCapital ?? 0;
-  const initialCapital = activeSession?.initialCapital ?? 0;
-  const sessionProfit = currentBalance - initialCapital;
-  const nextStake = activeSession?.nextTradeAmount ?? 0;
-  const displayedStake = instantStakeOverride ?? nextStake;
-  const tradeNum = activeSession?.currentTradeNumber ?? 1;
-  const sequence = activeSession?.sequence || [];
 
   if (sessionLoading) {
     return (

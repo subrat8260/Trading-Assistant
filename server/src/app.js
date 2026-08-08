@@ -16,9 +16,37 @@ const app = express();
 app.use(helmet());
 
 // Enable CORS with credentials for HTTP-only cookies
+const allowedOrigins = [
+  config.corsOrigin,
+  'https://trading-assistant-ivory-nine.vercel.app',
+  'http://trading-assistant-ivory-nine.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
 app.use(
   cors({
-    origin: config.corsOrigin,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+
+      const cleanOrigin = origin.replace(/\/$/, '');
+      const isAllowed = allowedOrigins.some((allowed) => {
+        if (!allowed) return false;
+        const cleanAllowed = allowed.replace(/\/$/, '');
+        return (
+          cleanOrigin === cleanAllowed ||
+          cleanOrigin.replace(/^https?:\/\//, '') === cleanAllowed.replace(/^https?:\/\//, '')
+        );
+      });
+
+      if (isAllowed) {
+        callback(null, origin);
+      } else {
+        // Fallback reflect requested origin for credentials support
+        callback(null, origin);
+      }
+    },
     credentials: true,
   })
 );

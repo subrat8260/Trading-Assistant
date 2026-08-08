@@ -70,8 +70,15 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
+        const rawBase = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+        const refreshEndpoint = rawBase.endsWith('/auth/refresh-token')
+          ? rawBase
+          : rawBase.endsWith('/api/v1')
+          ? `${rawBase}/auth/refresh-token`
+          : `${rawBase}/api/v1/auth/refresh-token`;
+
         const refreshResponse = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/auth/refresh-token`,
+          refreshEndpoint,
           {},
           { withCredentials: true }
         );

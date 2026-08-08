@@ -29,7 +29,7 @@ def process_excel(input_data):
         }
 
     try:
-        # Load workbook using openpyxl (Cross-platform for Linux & Windows)
+        # Load workbook using openpyxl
         wb = openpyxl.load_workbook(excel_path, data_only=True)
         ws_alg = wb['algoritmo']
 
@@ -57,7 +57,6 @@ def process_excel(input_data):
 
         target_win_ratio = expected_wins / total_events if total_events > 0 else 0
 
-        # Calculate Masaniello Profit Multiplier from Sheet algoritmo!N2
         profit_multiplier = matrix[0][0] if isinstance(matrix[0][0], (int, float)) else 1.00843534
         final_capital = capital * profit_multiplier
         total_win_profit = final_capital - capital
@@ -70,20 +69,20 @@ def process_excel(input_data):
         actual_wins = 0
         actual_losses = 0
 
-        max_trades = min(100, total_events)
+        # Process up to length of trade_results + 1 for next recommended trade
+        max_steps = max(len(trade_results) + 1, 100)
 
-        for step in range(max_trades + 1):
-            if I >= expected_wins or H == (1 + total_events - expected_wins):
-                break
+        for step in range(max_steps):
+            if H == (total_events - expected_wins):
+                stake = F
+            else:
+                r_idx = H + I + 2 - 1
+                val_i2 = get_mat(r_idx, I + 2 - 1)
+                val_i1 = get_mat(r_idx, I + 1 - 1)
+                denom = val_i1 + (quota - 1.0) * val_i2
+                factor = (1.0 - quota * val_i2 / denom) if denom != 0 else 0.0
+                stake = factor * F
 
-            r_idx = H + I + 2 - 1
-            val_i2 = get_mat(r_idx, I + 2 - 1)
-            val_i1 = get_mat(r_idx, I + 1 - 1)
-
-            denom = val_i1 + (quota - 1.0) * val_i2
-            factor = (1.0 - quota * val_i2 / denom) if denom != 0 else 0.0
-
-            stake = factor * F
             res_str = trade_results[step] if step < len(trade_results) else ""
 
             if not res_str:
@@ -101,12 +100,14 @@ def process_excel(input_data):
             if is_win:
                 net_return = stake * (quota - 1.0)
                 F = F + net_return
-                I += 1
+                I_next = I + 1
+                H_next = H
                 actual_wins += 1
             else:
                 net_return = -stake
                 F = F + net_return
-                H += 1
+                H_next = H + 1
+                I_next = I
                 actual_losses += 1
 
             trades_output.append({
@@ -116,6 +117,12 @@ def process_excel(input_data):
                 "netReturn": round(net_return, 2),
                 "portfolioBalance": round(F, 2)
             })
+
+            # Check continuous cycle reset matching Excel sheet
+            if I_next >= expected_wins or H_next == (1 + total_events - expected_wins):
+                H, I = 0, 0
+            else:
+                H, I = H_next, I_next
 
         total_executed = actual_wins + actual_losses
         actual_win_pct = actual_wins / total_executed if total_executed > 0 else 0.0

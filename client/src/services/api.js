@@ -21,8 +21,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+const getBaseURL = () => {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '/api/v1').trim().replace(/\/$/, '');
+  if (envUrl === '/api/v1' || envUrl.endsWith('/api/v1')) {
+    return envUrl;
+  }
+  return `${envUrl}/api/v1`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: getBaseURL(),
   timeout: 10000,
   withCredentials: true, // Send HTTP-only cookies across requests
   headers: {
